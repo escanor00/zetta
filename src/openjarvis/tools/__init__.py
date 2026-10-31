@@ -33,6 +33,11 @@ except ImportError:
     pass
 
 try:
+    import openjarvis.tools.file_list  # noqa: F401
+except ImportError:
+    pass
+
+try:
     import openjarvis.tools.web_search  # noqa: F401
 except ImportError:
     pass
@@ -108,6 +113,11 @@ except ImportError:
     pass
 
 try:
+    import openjarvis.tools.file_delete  # noqa: F401
+except ImportError:
+    pass
+
+try:
     import openjarvis.tools.apply_patch  # noqa: F401
 except ImportError:
     pass
@@ -149,6 +159,11 @@ except ImportError:
 
 try:
     import openjarvis.tools.digest_collect  # noqa: F401
+except ImportError:
+    pass
+
+try:
+    import openjarvis.tools.daily_briefing  # noqa: F401
 except ImportError:
     pass
 

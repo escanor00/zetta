@@ -182,6 +182,46 @@ class TestOrchestratorAgent:
         assert result.tool_results[0].tool_name == "calculator"
         assert result.tool_results[0].content == "4"
 
+    def test_empty_reply_after_tool_result_is_retried(self):
+        engine = MagicMock()
+        engine.engine_id = "mock"
+        usage = {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6}
+        engine.generate.side_effect = [
+            {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "name": "calculator",
+                        "arguments": '{"expression":"2+2"}',
+                    }
+                ],
+                "usage": usage,
+                "model": "test-model",
+                "finish_reason": "tool_calls",
+            },
+            {"content": "", "usage": usage, "model": "test-model"},
+            {"content": "The answer is 4.", "usage": usage, "model": "test-model"},
+        ]
+        agent = OrchestratorAgent(engine, "test-model", tools=[_CalculatorStub()])
+        result = agent.run("What is 2+2?")
+        assert result.content == "The answer is 4."
+        assert engine.generate.call_count == 3
+
+    def test_persistently_empty_reply_stops_after_retries(self):
+        engine = MagicMock()
+        engine.engine_id = "mock"
+        engine.generate.return_value = {
+            "content": "",
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+            "model": "test-model",
+            "finish_reason": "stop",
+        }
+        agent = OrchestratorAgent(engine, "test-model")
+        result = agent.run("Hello")
+        assert result.content == ""
+        assert engine.generate.call_count == 3
+
     def test_multiple_tool_calls_same_turn(self):
         engine = _make_engine_multi_tool()
         agent = OrchestratorAgent(

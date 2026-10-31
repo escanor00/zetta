@@ -1,12 +1,13 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { MessageBubble } from './MessageBubble';
+import { MessageBubble, MemoizedMessageBubble } from './MessageBubble';
 import { InputArea } from './InputArea';
 import { StreamingDots } from './StreamingDots';
 import { useAppStore } from '../../lib/store';
 import { shouldAutoplayFinishedReply, useTtsStore } from '../../lib/tts';
+import { useFillerSpeech } from '../../hooks/useFillerSpeech';
 import { stripThinkTags } from '../../lib/message-text';
-import { Sparkles, PanelRightOpen, PanelRightClose, Database, MessageSquare, X } from 'lucide-react';
+import { PanelRightOpen, PanelRightClose, Database, MessageSquare, X } from 'lucide-react';
 import { listConnectors } from '../../lib/connectors-api';
 
 function getGreeting(): string {
@@ -16,7 +17,13 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-export function ChatArea() {
+interface ChatAreaProps {
+  onWakeStatusChange?: (
+    status: 'listening' | 'transcribing' | 'offline' | 'idle' | 'conversation',
+  ) => void;
+}
+
+export function ChatArea({ onWakeStatusChange }: ChatAreaProps) {
   const activeId = useAppStore((s) => s.activeId);
   const messages = useAppStore((s) => s.messages);
   const streamState = useAppStore((s) => s.streamState);
@@ -28,6 +35,7 @@ export function ChatArea() {
   const wasStreaming = useRef(false);
   const lastScrollTop = useRef(0);
   const isCurrentChatStreaming = streamState.isStreaming && streamState.conversationId === activeId;
+  useFillerSpeech();
 
   // Autoplay: speak a reply once it is finished, never while it streams -- a
   // partial sentence would be synthesized and then cut off by the next chunk.
@@ -182,12 +190,6 @@ export function ChatArea() {
       >
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full px-4">
-            <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
-              style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}
-            >
-              <Sparkles size={24} />
-            </div>
             <h2 className="text-xl font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
               {getGreeting()}
             </h2>
@@ -232,8 +234,10 @@ export function ChatArea() {
             {messages.map((msg, i) => {
               const isLastAssistant =
                 i === messages.length - 1 && msg.role === 'assistant';
+              // Use versão memoizada para mensagens antigas, não-memoizada para a última (que pode estar mudando)
+              const BubbleComponent = isLastAssistant ? MessageBubble : MemoizedMessageBubble;
               return (
-                <MessageBubble
+                <BubbleComponent
                   key={msg.id}
                   message={msg}
                   isLive={isLastAssistant && isCurrentChatStreaming}
@@ -255,7 +259,9 @@ export function ChatArea() {
           </div>
         )}
       </div>
-      <InputArea />
+      <InputArea
+        onWakeStatusChange={onWakeStatusChange}
+      />
     </div>
   );
 }

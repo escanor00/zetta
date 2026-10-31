@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeKatex from 'rehype-katex';
@@ -10,10 +10,11 @@ import { AudioPlayer } from './AudioPlayer';
 import { ToolCallCard } from './ToolCallCard';
 import { ResearchTimeline } from './ResearchTimeline';
 import { rehypeCitations } from '../../lib/rehype-citations';
-import { XRayFooter } from './XRayFooter';
 import { SpeakMessageButton } from './SpeakMessageButton';
 import type { ChatMessage } from '../../types';
 import { stripThinkTags } from '../../lib/message-text';
+import { useTtsStore } from '../../lib/tts';
+import { TypewriterText } from './TypewriterText';
 
 interface Props {
   message: ChatMessage;
@@ -98,6 +99,14 @@ function CopyMessageButton({ content }: { content: string }) {
 
 export function MessageBubble({ message, isLive = false }: Props) {
   const isUser = message.role === 'user';
+  const ttsState = useTtsStore((s) => s.state);
+  const speakingId = useTtsStore((s) => s.speakingId);
+
+  // Esta mensagem está sendo falada agora?
+  const isSpeaking = speakingId === message.id && ttsState === 'speaking';
+
+  // Também detecta quando está carregando (loading) para começar o efeito mais cedo
+  const isSpeakingOrLoading = speakingId === message.id && (ttsState === 'speaking' || ttsState === 'loading');
 
   const cleanContent = useMemo(() => stripThinkTags(message.content), [message.content]);
 
@@ -161,16 +170,26 @@ export function MessageBubble({ message, isLive = false }: Props) {
 
       {/* Assistant message */}
       {cleanContent && (
-        <div className="prose max-w-none">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={rehypePlugins}
-            components={{
-              pre: CodeBlockPre,
-            }}
-          >
-            {cleanContent}
-          </ReactMarkdown>
+        <div className="prose max-w-none min-w-0">
+          {isSpeakingOrLoading ? (
+            // Modo typewriter: revela palavra por palavra enquanto fala
+            <TypewriterText
+              text={cleanContent}
+              isSpeaking={true}
+              speed={3.5}
+            />
+          ) : (
+            // Modo normal: renderiza markdown completo
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkMath]}
+              rehypePlugins={rehypePlugins}
+              components={{
+                pre: CodeBlockPre,
+              }}
+            >
+              {cleanContent}
+            </ReactMarkdown>
+          )}
         </div>
       )}
 
@@ -181,11 +200,21 @@ export function MessageBubble({ message, isLive = false }: Props) {
           <SpeakMessageButton messageId={message.id} content={cleanContent} />
         )}
       </div>
-      <XRayFooter
-        usage={message.usage}
-        telemetry={message.telemetry}
-        isResearch={message.isResearch}
-      />
     </div>
   );
 }
+
+// Otimização: evita re-renders desnecessários quando mensagens anteriores não mudaram
+export const MemoizedMessageBubble = memo(
+  MessageBubble,
+  (prev, next) => {
+    // Re-renderiza apenas se o conteúdo da mensagem ou estado de "live" mudaram
+    return (
+      prev.message.id === next.message.id &&
+      prev.message.content === next.message.content &&
+      prev.isLive === next.isLive &&
+      prev.message.audio?.url === next.message.audio?.url &&
+      prev.message.toolCalls?.length === next.message.toolCalls?.length
+    );
+  }
+);

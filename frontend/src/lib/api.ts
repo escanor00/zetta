@@ -431,6 +431,131 @@ export async function fetchTtsHealth(): Promise<TtsHealth> {
   return res.json();
 }
 
+export interface SystemStats {
+  cpu: { percent: number };
+  memory: { percent: number; used_bytes: number; total_bytes: number };
+  disk: { percent: number; used_bytes: number; total_bytes: number } | null;
+  /** Bytes per second; `null` until the server has two samples to compare. */
+  network: { down: number | null; up: number | null };
+}
+
+/** Host CPU/memory/disk/network; `null` when the backend cannot be reached. */
+export async function fetchSystemStats(): Promise<SystemStats | null> {
+  try {
+    const res = await apiFetch(`/v1/system/stats`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export interface UnreadMessage {
+  uid: number;
+  from: string;
+  from_address: string;
+  subject: string;
+  date: string | null;
+}
+
+export interface UnreadMail {
+  connected: boolean;
+  /** Every unread message, even though `messages` lists only the newest. */
+  count: number;
+  messages: UnreadMessage[];
+  error?: string;
+}
+
+/** Unread mail summary; `null` when the backend cannot be reached. */
+export async function fetchUnreadMail(limit = 8): Promise<UnreadMail | null> {
+  try {
+    const res = await apiFetch(`/v1/mail/unread?limit=${limit}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+/** Text spoken while the morning digest is prepared ('' when none is set). */
+export async function fetchMorningRecap(): Promise<string> {
+  try {
+    const res = await apiFetch(`/v1/morning/recap`);
+    if (!res.ok) return '';
+    const body = (await res.json()) as { text?: string };
+    return body.text ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** Today's stored digest text, or `null` when none was generated yet. */
+export async function fetchTodayDigest(): Promise<string | null> {
+  try {
+    const res = await apiFetch(`/api/digest`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { text?: string };
+    return body.text?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Generates (and stores) the digest now; this takes several seconds. */
+export async function generateDigest(): Promise<string | null> {
+  try {
+    const res = await apiFetch(`/api/digest/generate`, { method: 'POST' });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { text?: string };
+    return body.text?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export interface Headline {
+  id: string;
+  source: string;
+  title: string;
+  link: string | null;
+  published: string | null;
+}
+
+export interface Headlines {
+  connected: boolean;
+  items: Headline[];
+  error?: string;
+}
+
+/** Latest headlines from the configured feeds; `null` when the backend is down. */
+export async function fetchHeadlines(limit = 6): Promise<Headlines | null> {
+  try {
+    const res = await apiFetch(`/v1/news/headlines?limit=${limit}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export interface ObsidianStatus {
+  configured: boolean;
+  connected: boolean;
+  vault: string;
+  notes: number | null;
+}
+
+/** Vault connection state; `null` when the backend cannot be reached. */
+export async function fetchObsidianStatus(): Promise<ObsidianStatus | null> {
+  try {
+    const res = await apiFetch(`/v1/obsidian/status`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchSpeechHealth(): Promise<SpeechHealth> {
   if (isTauri()) {
     try {

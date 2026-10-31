@@ -24,8 +24,14 @@ from openjarvis.server.comparison import comparison_router
 from openjarvis.server.connectors_router import create_connectors_router
 from openjarvis.server.dashboard import dashboard_router
 from openjarvis.server.digest_routes import create_digest_router
+from openjarvis.server.obsidian_active_note import (
+    router as obsidian_active_note_router,
+)
 from openjarvis.server.research_router import router as research_router
 from openjarvis.server.routes import router
+from openjarvis.server.morning_routes import router as morning_router
+from openjarvis.server.system_stats import router as system_stats_router
+from openjarvis.server.obsidian_active_note import router as obsidian_active_note_router
 from openjarvis.server.upload_router import router as upload_router
 
 logger = logging.getLogger(__name__)
@@ -292,6 +298,7 @@ def create_app(
     )
     app.state.channel_bridge = channel_bridge
     app.state.config = config
+    app.state.obsidian_active_note = None
     app.state._memory_backend_lock = threading.Lock()
     app.state.memory_backend = memory_backend
     app.state._owns_memory_backend = bool(own_memory_backend)
@@ -475,6 +482,9 @@ def create_app(
                     pass
 
     app.include_router(router)
+    app.include_router(obsidian_active_note_router)
+    app.include_router(system_stats_router)
+    app.include_router(morning_router)
     app.include_router(dashboard_router)
     app.include_router(comparison_router)
     app.include_router(create_connectors_router())

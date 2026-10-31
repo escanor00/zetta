@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import threading
+import time
 import uuid
 import weakref
 from dataclasses import replace
@@ -31,6 +33,7 @@ from openjarvis.server.models import (
 )
 
 router = APIRouter()
+_ACTIVE_OBSIDIAN_NOTE_TTL_SECONDS = 60
 
 
 def _to_messages(chat_messages) -> list[Message]:
@@ -56,6 +59,144 @@ def _to_messages(chat_messages) -> list[Message]:
             )
         )
     return messages
+
+
+def _inject_active_obsidian_note(request_body: ChatCompletionRequest, app: Any) -> None:
+    """Add recent active-note or canvas path context to the newest user message."""
+    active_note = getattr(app.state, "obsidian_active_note", None)
+    if not isinstance(active_note, dict):
+        return
+
+    updated_at = active_note.get("updated_at")
+    if not isinstance(updated_at, (float, int)) or (
+        time.monotonic() - updated_at > _ACTIVE_OBSIDIAN_NOTE_TTL_SECONDS
+    ):
+        app.state.obsidian_active_note = None
+        return
+
+    relative_path = active_note.get("path")
+    vault_name = active_note.get("vault")
+    if not isinstance(relative_path, str) or not isinstance(vault_name, str):
+        app.state.obsidian_active_note = None
+        return
+
+    for message in reversed(request_body.messages):
+        if message.role == "user":
+            file_description = (
+                "o canvas atualmente aberto"
+                if relative_path.casefold().endswith(".canvas")
+                else "a nota atualmente aberta"
+            )
+            context = (
+                "\n\n[Contexto local do Obsidian: "
+                f"{file_description} é "
+                f"{relative_path!r} no cofre {vault_name!r}. Use esse caminho "
+                "somente quando o usuário se referir ao arquivo aberto. "
+                "Este contexto não autoriza leitura ou alteração por si só.]"
+            )
+            message.content = (message.content or "") + context
+            return
+
+
+_BRIEFING_PATTERN = re.compile(
+    r"\be-?mails?\b"
+    r"|\bnot[ií]cias?\b|\bmanchetes?\b"
+    r"|\bresum\w*\b[^.?!]{0,20}\bdia\b|\bmeu dia\b|\bbriefing\b"
+    r"|\bo que (?:h[aá]|tem) de novo\b",
+    re.IGNORECASE,
+)
+
+
+def _inject_briefing_hint(request_body: ChatCompletionRequest, app: Any) -> None:
+    """Point the model at ``daily_briefing`` for summary / news / e-mail asks.
+
+    A small model otherwise answers from memory ("não tenho acesso ao seu
+    e-mail") instead of calling the tool. Only the newest user message counts,
+    and the hint is a prefix so it never ends up inside text the model writes.
+    """
+    enabled = getattr(
+        getattr(getattr(app.state, "config", None), "tools", None), "enabled", None
+    )
+    if not enabled or "daily_briefing" not in list(enabled):
+        return
+
+    for message in reversed(request_body.messages):
+        if message.role != "user":
+            continue
+        if not _BRIEFING_PATTERN.search(message.content or ""):
+            return
+        message.content = (
+            "[Contexto: para o resumo do dia, as notícias ou os e-mails do "
+            "usuário, chame a ferramenta daily_briefing antes de responder: "
+            "focus='all' para o resumo do dia, 'news' para notícias e 'email' "
+            "para saber se há e-mail para ler. Leia o resultado de forma "
+            "natural e curta, sem inventar nada além dele.]\n\n"
+            f"{message.content or ''}"
+        )
+        return
+
+
+_OBSIDIAN_REQUEST_HINTS = frozenset(
+    {
+        "obsidian",
+        "nota",
+        "notas",
+        "vault",
+        "cofre",
+        "canvas",
+        "arquivo",
+        "arquivos",
+        "pasta",
+        "markdown",
+    }
+)
+
+
+def _inject_obsidian_vault(request_body: ChatCompletionRequest, app: Any) -> None:
+    """Tell the model where the configured vault lives when the user asks for notes.
+
+    Without this the model only knows the repository path from its prompt and
+    refuses to create notes elsewhere. The hint is added only for requests that
+    mention notes/Obsidian, and it does not grant access by itself: the file
+    tools still enforce ``security.allowed_dirs``.
+    """
+    from openjarvis.server.obsidian_active_note import resolve_vault_path
+
+    vault_path = resolve_vault_path(app)
+    if not vault_path:
+        return
+
+    user_messages = [m for m in reversed(request_body.messages) if m.role == "user"]
+    if not user_messages:
+        return
+
+    # Follow-up turns ("Hoje eu comprei o Cloud Code.") rarely repeat the words
+    # that made this a note request, so look at the last few user messages. Voice
+    # transcription also mangles the name ("obsídia"), hence the prefix match.
+    def mentions_notes(text: str) -> bool:
+        words = re.findall(r"\w+", text.casefold())
+        return any(
+            word in _OBSIDIAN_REQUEST_HINTS or word.startswith(("obsid", "obsíd"))
+            for word in words
+        )
+
+    if not any(mentions_notes(m.content or "") for m in user_messages[:3]):
+        return
+
+    for message in user_messages[:1]:
+        # Prefix, never suffix: a trailing hint is read as part of the text the
+        # user asked to write ("com o conteúdo: ...") and ends up in the note.
+        message.content = (
+            "[Contexto local do Obsidian: o cofre de notas do usuário fica em "
+            f"{vault_path!r}. Para criar, ler ou editar notas use file_read e "
+            "file_write com o caminho absoluto dentro dessa pasta, por exemplo "
+            f"{vault_path}/Nome da nota.md. Quando o usuário citar só o nome "
+            "da nota, esse é o caminho: não peça o caminho ao usuário; para "
+            "editar, chame file_read e depois file_write. Este contexto não "
+            "faz parte do conteúdo das notas.]\n\n"
+            f"{message.content or ''}"
+        )
+        return
 
 
 def _ensure_identity_prompt(messages: list[Message], app_config) -> list[Message]:
@@ -158,6 +299,9 @@ def _ensure_identity_prompt(messages: list[Message], app_config) -> list[Message
 @router.post("/v1/chat/completions")
 async def chat_completions(request_body: ChatCompletionRequest, request: Request):
     """Handle chat completion requests (streaming and non-streaming)."""
+    _inject_active_obsidian_note(request_body, request.app)
+    _inject_obsidian_vault(request_body, request.app)
+    _inject_briefing_hint(request_body, request.app)
     engine = request.app.state.engine
     agent = getattr(request.app.state, "agent", None)
     model = request_body.model
@@ -618,24 +762,42 @@ def _handle_agent(
     # Last message is the input
     input_text = req.messages[-1].content if req.messages else ""
 
+    from openjarvis.tools._request_context import (
+        ToolRequestContext,
+        reset_tool_request_context,
+        set_tool_request_context,
+    )
+    from openjarvis.tools.file_delete import prepare_voice_delete_confirmation
+
     # Override agent model for this request if the caller specified one.
     # Locked for the full override-run-restore cycle (#759): only the
     # override/restore lines racing wouldn't be enough, since agent.run()
     # itself reads self._model throughout the call.
-    with _get_agent_model_lock(agent):
-        original_model = agent._model
-        if model:
-            agent._model = model
-        try:
-            if trace_store is not None:
-                from openjarvis.traces.collector import TraceCollector
+    request_context = ToolRequestContext(
+        conversation_id=req.conversation_id,
+        input_source=req.input_source,
+        user_text=input_text,
+        request_id=uuid.uuid4().hex,
+    )
+    request_context_token = set_tool_request_context(request_context)
+    try:
+        prepare_voice_delete_confirmation(request_context)
+        with _get_agent_model_lock(agent):
+            original_model = agent._model
+            if model:
+                agent._model = model
+            try:
+                if trace_store is not None:
+                    from openjarvis.traces.collector import TraceCollector
 
-                collector = TraceCollector(agent, store=trace_store, bus=bus)
-                result = collector.run(input_text, context=ctx)
-            else:
-                result = agent.run(input_text, context=ctx)
-        finally:
-            agent._model = original_model
+                    collector = TraceCollector(agent, store=trace_store, bus=bus)
+                    result = collector.run(input_text, context=ctx)
+                else:
+                    result = agent.run(input_text, context=ctx)
+            finally:
+                agent._model = original_model
+    finally:
+        reset_tool_request_context(request_context_token)
 
     usage = UsageInfo(
         prompt_tokens=result.metadata.get("prompt_tokens", 0),

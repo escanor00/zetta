@@ -7,9 +7,11 @@ functions for easy mocking in tests.
 
 from __future__ import annotations
 
+import html
 import http.client
 import ipaddress
 import json
+import re
 import socket
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -213,6 +215,32 @@ def _request_feed(url: str, target: _FeedTarget) -> httpx.Response:
     ) from last_error
 
 
+def _decode_feed(resp: httpx.Response) -> str:
+    """Decode a feed body using the encoding its XML declaration announces.
+
+    Many feeds (e.g. Folha, ``ISO-8859-1``) are served as ``text/xml`` with no
+    charset in the header, and ``httpx`` then assumes UTF-8 and corrupts every
+    accented character.
+    """
+    try:
+        if "charset=" in str(resp.headers.get("content-type", "")).lower():
+            return resp.text
+        declared = re.search(
+            rb"""encoding=["']([A-Za-z0-9._-]+)["']""", resp.content[:200]
+        )
+        if declared is None:
+            return resp.text
+        return resp.content.decode(declared.group(1).decode("ascii"), errors="replace")
+    except (LookupError, TypeError, AttributeError):
+        return resp.text
+
+
+def _strip_html(text: str) -> str:
+    """Remove tags/entities from a feed summary, which is often raw HTML."""
+    without_tags = re.sub(r"<[^>]*>", " ", text)
+    return re.sub(r"\s+", " ", html.unescape(without_tags)).strip()
+
+
 def _fetch_feed(url: str) -> str:
     """Download feed XML while validating every redirect target."""
     current_url = url
@@ -221,11 +249,11 @@ def _fetch_feed(url: str) -> str:
         resp = _request_feed(current_url, target)
         if resp.status_code not in {301, 302, 303, 307, 308}:
             resp.raise_for_status()
-            return resp.text
+            return _decode_feed(resp)
         location = resp.headers.get("location", "")
         if not location:
             resp.raise_for_status()
-            return resp.text
+            return _decode_feed(resp)
         current_url = urljoin(current_url, location)
     raise ValueError(f"RSS feed exceeded {_MAX_REDIRECTS} redirects")
 
@@ -242,7 +270,7 @@ def _parse_rss_items(xml_text: str, max_items: int = 5) -> List[Dict[str, str]]:
         items.append(
             {
                 "title": (item_el.findtext("title") or "").strip(),
-                "description": (item_el.findtext("description") or "").strip()[:200],
+                "description": _strip_html(item_el.findtext("description") or "")[:200],
                 "link": (item_el.findtext("link") or "").strip(),
                 "pubDate": (item_el.findtext("pubDate") or "").strip(),
             }
@@ -263,7 +291,7 @@ def _parse_rss_items(xml_text: str, max_items: int = 5) -> List[Dict[str, str]]:
                     "title": (
                         entry_el.findtext("{http://www.w3.org/2005/Atom}title") or ""
                     ).strip(),
-                    "description": summary.strip()[:200],
+                    "description": _strip_html(summary)[:200],
                     "link": link_href.strip(),
                     "pubDate": updated.strip(),
                 }

@@ -6,13 +6,14 @@ interface Props {
   usage?: TokenUsage;
   telemetry?: MessageTelemetry;
   isResearch?: boolean;
+  variant?: 'default' | 'hologram';
 }
 
 function formatMs(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-export function XRayFooter({ usage, telemetry, isResearch = false }: Props) {
+export function XRayFooter({ usage, telemetry, isResearch = false, variant = 'default' }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   // Build collapsed summary parts. For Deep Research responses we hide the
@@ -80,45 +81,49 @@ export function XRayFooter({ usage, telemetry, isResearch = false }: Props) {
   }
 
   return (
-    <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: '0.375rem' }}>
+    <div
+      className={variant === 'hologram' ? 'hologram-telemetry' : undefined}
+      style={variant === 'default' ? { borderTop: '1px solid var(--color-border-subtle)', marginTop: '0.375rem' } : undefined}
+    >
       {/* Collapsed row */}
       <button
         onClick={() => rows.length > 0 && setExpanded(!expanded)}
-        className="flex items-center gap-2 w-full text-left py-1"
-        style={{ cursor: rows.length > 0 ? 'pointer' : 'default' }}
+        aria-expanded={rows.length > 0 ? expanded : undefined}
+        className={`flex items-center gap-2 w-full text-left py-1 ${variant === 'hologram' ? 'hologram-telemetry-toggle' : ''}`}
+        style={variant === 'default' ? { cursor: rows.length > 0 ? 'pointer' : 'default' } : undefined}
       >
         <span
-          className="w-1 h-1 rounded-full shrink-0"
-          style={{ background: 'var(--color-accent)' }}
+          className={`w-1 h-1 rounded-full shrink-0 ${variant === 'hologram' ? 'hologram-telemetry-dot' : ''}`}
+          style={variant === 'default' ? { background: 'var(--color-accent)' } : undefined}
         />
         <span
           className="text-[11px] flex-1"
-          style={{ color: 'var(--color-text-tertiary)', fontFamily: 'system-ui' }}
+          style={variant === 'default' ? { color: 'var(--color-text-tertiary)', fontFamily: 'system-ui' } : undefined}
         >
           {summary}
         </span>
         {rows.length > 0 && (
           expanded
-            ? <ChevronUp size={10} style={{ color: 'var(--color-text-tertiary)' }} />
-            : <ChevronDown size={10} style={{ color: 'var(--color-text-tertiary)' }} />
+            ? <ChevronUp size={10} className={variant === 'hologram' ? 'hologram-telemetry-chevron' : undefined} style={variant === 'default' ? { color: 'var(--color-text-tertiary)' } : undefined} />
+            : <ChevronDown size={10} className={variant === 'hologram' ? 'hologram-telemetry-chevron' : undefined} style={variant === 'default' ? { color: 'var(--color-text-tertiary)' } : undefined} />
         )}
       </button>
 
       {/* Expanded trace */}
       {expanded && rows.length > 0 && (
         <div
-          className="rounded-lg mt-1 px-3 py-2"
-          style={{ background: 'rgba(0, 0, 0, 0.15)' }}
+          className={`rounded-lg mt-1 px-3 py-2 ${variant === 'hologram' ? 'hologram-telemetry-details' : ''}`}
+          style={variant === 'default' ? { background: 'rgba(0, 0, 0, 0.15)' } : undefined}
         >
           <div className="grid gap-y-0.5" style={{ gridTemplateColumns: 'auto 1fr', columnGap: '1rem' }}>
             {rows.map((row) => (
               <div key={row.label} className="contents">
-                <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)', fontFamily: 'monospace' }}>
+                <span className="text-[11px]" style={variant === 'hologram' ? undefined : { color: 'var(--color-text-tertiary)', fontFamily: 'monospace' }}>
                   {row.label}
                 </span>
                 <span
                   className="text-[11px]"
-                  style={{ color: row.color || 'var(--color-text-secondary)', fontFamily: 'monospace' }}
+                  style={variant === 'hologram' ? undefined : { color: row.color || 'var(--color-text-secondary)', fontFamily: 'monospace' }}
                 >
                   {row.value}
                 </span>

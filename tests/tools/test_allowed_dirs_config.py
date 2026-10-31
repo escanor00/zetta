@@ -10,6 +10,7 @@ import pytest
 
 from openjarvis.core.config import JarvisConfig, load_config
 from openjarvis.tools._paths import resolve_allowed_dirs
+from openjarvis.tools.file_list import FileListTool
 from openjarvis.tools.file_read import FileReadTool
 from openjarvis.tools.file_write import FileWriteTool
 
@@ -26,7 +27,7 @@ def test_explicit_empty_list_does_not_load_ambient_config(monkeypatch):
     assert resolve_allowed_dirs([]) == []
 
 
-@pytest.mark.parametrize("tool_class", [FileReadTool, FileWriteTool])
+@pytest.mark.parametrize("tool_class", [FileReadTool, FileWriteTool, FileListTool])
 @pytest.mark.parametrize("invalid", ["/tmp/allowed", [""], [None], {"/": True}, None])
 def test_invalid_directory_config_never_creates_an_unrestricted_tool(
     monkeypatch, tool_class, invalid
@@ -38,7 +39,7 @@ def test_invalid_directory_config_never_creates_an_unrestricted_tool(
         tool_class()
 
 
-@pytest.mark.parametrize("tool_class", [FileReadTool, FileWriteTool])
+@pytest.mark.parametrize("tool_class", [FileReadTool, FileWriteTool, FileListTool])
 def test_unreadable_config_does_not_remove_directory_restrictions(
     monkeypatch, tool_class
 ):
@@ -113,18 +114,19 @@ def test_active_config_controls_tools_instead_of_ambient_config(
     config_path = tmp_path / "explicit.toml"
     config_path.write_text(
         f'[security]\nallowed_dirs = ["{inside.as_posix()}"]\n'
-        '[tools]\nenabled = "file_read,file_write"\n'
+        '[tools]\nenabled = "file_read,file_list,file_write"\n'
     )
     cfg = load_config(config_path)
     ambient = JarvisConfig()
     monkeypatch.setattr("openjarvis.core.config.load_config", lambda *a, **kw: ambient)
     ToolRegistry.register_value("file_read", FileReadTool)
+    ToolRegistry.register_value("file_list", FileListTool)
     ToolRegistry.register_value("file_write", FileWriteTool)
 
     if entry_point == "cli_sdk":
         from openjarvis.cli.ask import _build_tools
 
-        tools = _build_tools(["file_read", "file_write"], cfg, None, "")
+        tools = _build_tools(["file_read", "file_list", "file_write"], cfg, None, "")
     elif entry_point == "system":
         from openjarvis.system.builder import SystemBuilder
 
@@ -133,7 +135,9 @@ def test_active_config_controls_tools_instead_of_ambient_config(
         from openjarvis.system.orchestrator import QueryOrchestrator
 
         system = SimpleNamespace(config=cfg, memory_backend=None, engine=None, model="")
-        tools = QueryOrchestrator(system)._build_tools(["file_read", "file_write"])
+        tools = QueryOrchestrator(system)._build_tools(
+            ["file_read", "file_list", "file_write"]
+        )
     else:
         from openjarvis.mcp.server import MCPServer
 
@@ -141,10 +145,13 @@ def test_active_config_controls_tools_instead_of_ambient_config(
 
     file_tools = {tool.spec.name: tool for tool in tools}
     read, write = file_tools["file_read"], file_tools["file_write"]
+    listing = file_tools["file_list"]
     assert write.execute(path="note.txt", content="allowed").success
     assert read.execute(path="note.txt").content == "allowed"
+    assert listing.execute(path=str(inside)).success
     assert not read.execute(path=str(outside)).success
     assert not write.execute(path=str(outside), content="blocked").success
+    assert not listing.execute(path=str(tmp_path)).success
     assert outside.read_text() == "outside must stay intact"
 
 

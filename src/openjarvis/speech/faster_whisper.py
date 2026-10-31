@@ -116,7 +116,12 @@ class FasterWhisperBackend(SpeechBackend):
                 with tmp:
                     tmp.write(audio)
 
-                kwargs = {}
+                # Filter non-speech/noise before decoding. Short transient sounds
+                # should not be interpreted as a spoken phrase by Whisper.
+                kwargs = {
+                    "vad_filter": True,
+                    "vad_parameters": {"min_speech_duration_ms": 300},
+                }
                 if language:
                     kwargs["language"] = language
 

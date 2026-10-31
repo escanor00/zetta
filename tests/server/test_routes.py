@@ -11,7 +11,7 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from openjarvis.core.events import EventBus, EventType  # noqa: E402
-from openjarvis.core.types import Role  # noqa: E402
+from openjarvis.core.types import Role, ToolCall  # noqa: E402
 from openjarvis.server.app import create_app  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -100,6 +100,63 @@ class _SpyMemoryService:
 
     def stop(self, timeout: float = 2.0) -> None:
         pass
+
+def test_agent_file_delete_requires_a_separate_voice_turn(tmp_path):
+    from openjarvis.agents._stubs import AgentResult
+    from openjarvis.server.models import ChatCompletionRequest, ChatMessage
+    from openjarvis.server.routes import _handle_agent
+    from openjarvis.tools._stubs import ToolExecutor
+    from openjarvis.tools.file_delete import FileDeleteTool
+
+    note = tmp_path / "voice note.md"
+    note.write_text("note", encoding="utf-8")
+    tool = FileDeleteTool(allowed_dirs=[str(tmp_path)])
+
+    class DeletingAgent:
+        _model = "test-model"
+
+        def run(self, input_text, *, context):
+            result = ToolExecutor([tool]).execute(
+                ToolCall(
+                    id="delete",
+                    name="file_delete",
+                    arguments=json.dumps({"path": str(note)}),
+                )
+            )
+            return AgentResult(content=result.content, turns=1)
+
+    agent = DeletingAgent()
+
+    staged = _handle_agent(
+        agent,
+        "test-model",
+        ChatCompletionRequest(
+            model="test-model",
+            conversation_id="route-voice-delete",
+            input_source="voice",
+            messages=[ChatMessage(role="user", content="apague voice note")],
+        ),
+    )
+    assert "Confirmo excluir voice note" in staged.choices[0].message.content
+    assert note.exists()
+
+    confirmed = _handle_agent(
+        agent,
+        "test-model",
+        ChatCompletionRequest(
+            model="test-model",
+            conversation_id="route-voice-delete",
+            input_source="voice",
+            messages=[
+                ChatMessage(
+                    role="user",
+                    content="Confirmo excluir voice note",
+                )
+            ],
+        ),
+    )
+    assert "Arquivo excluído" in confirmed.choices[0].message.content
+    assert not note.exists()
 
 
 class TestMemoryServiceWiring:

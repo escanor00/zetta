@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -24,6 +24,8 @@ class ChatMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     model: str
     messages: List[ChatMessage]
+    conversation_id: str = ""
+    input_source: Literal["text", "voice"] = "text"
     temperature: float = 0.7
     max_tokens: int = 1024
     stream: bool = False

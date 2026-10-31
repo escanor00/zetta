@@ -31,6 +31,8 @@ _TOOL_ANNOTATIONS: Dict[str, Dict[str, Any]] = {
     "retrieval": {"readOnlyHint": True, "destructiveHint": False},
     "llm": {"readOnlyHint": False, "destructiveHint": False},
     "file_read": {"readOnlyHint": True, "destructiveHint": False},
+    "file_write": {"readOnlyHint": False, "destructiveHint": True},
+    "file_delete": {"readOnlyHint": False, "destructiveHint": True},
     "web_search": {"readOnlyHint": True, "destructiveHint": False},
     "code_interpreter": {"destructiveHint": True, "readOnlyHint": False},
     "repl": {"destructiveHint": True, "readOnlyHint": False},
@@ -63,6 +65,7 @@ class MCPServer:
         rate_limiter: Optional[Any] = None,
         agent_id: str = _MCP_AGENT_ID,
         allowed_dirs: Optional[List[str]] = None,
+        delete_allowed_dirs: Optional[List[str]] = None,
     ) -> None:
         """Create an MCP server with the same dispatch gates as other agents.
 
@@ -78,7 +81,10 @@ class MCPServer:
         constructor policy.
         """
         if tools is None:
-            tools = self._auto_discover_tools(allowed_dirs=allowed_dirs)
+            tools = self._auto_discover_tools(
+                allowed_dirs=allowed_dirs,
+                delete_allowed_dirs=delete_allowed_dirs,
+            )
         self._tools: Dict[str, BaseTool] = {t.spec.name: t for t in tools}
         self._executor = ToolExecutor(
             tools,
@@ -90,7 +96,9 @@ class MCPServer:
 
     @staticmethod
     def _auto_discover_tools(
-        *, allowed_dirs: Optional[List[str]] = None
+        *,
+        allowed_dirs: Optional[List[str]] = None,
+        delete_allowed_dirs: Optional[List[str]] = None,
     ) -> List[BaseTool]:
         """Auto-discover all built-in tools by direct import.
 
@@ -117,6 +125,24 @@ class MCPServer:
             from openjarvis.tools.file_read import FileReadTool
 
             _tool_classes.append(FileReadTool)
+        except ImportError:
+            pass
+        try:
+            from openjarvis.tools.file_list import FileListTool
+
+            _tool_classes.append(FileListTool)
+        except ImportError:
+            pass
+        try:
+            from openjarvis.tools.file_write import FileWriteTool
+
+            _tool_classes.append(FileWriteTool)
+        except ImportError:
+            pass
+        try:
+            from openjarvis.tools.file_delete import FileDeleteTool
+
+            _tool_classes.append(FileDeleteTool)
         except ImportError:
             pass
         try:
@@ -194,8 +220,14 @@ class MCPServer:
 
         for cls in _tool_classes:
             try:
-                if getattr(cls, "tool_id", None) in {"file_read", "file_write"}:
+                if getattr(cls, "tool_id", None) in {
+                    "file_read",
+                    "file_write",
+                    "file_list",
+                }:
                     tools.append(cls(allowed_dirs=allowed_dirs))
+                elif getattr(cls, "tool_id", None) == "file_delete":
+                    tools.append(cls(allowed_dirs=delete_allowed_dirs or []))
                 else:
                     tools.append(cls())
             except Exception as exc:
@@ -211,8 +243,12 @@ class MCPServer:
                     try:
                         kwargs = (
                             {"allowed_dirs": allowed_dirs}
-                            if key in {"file_read", "file_write"}
-                            else {}
+                            if key in {"file_read", "file_write", "file_list"}
+                            else (
+                                {"allowed_dirs": delete_allowed_dirs or []}
+                                if key == "file_delete"
+                                else {}
+                            )
                         )
                         tool = ToolRegistry.create(key, **kwargs)
                         if isinstance(tool, BaseTool):

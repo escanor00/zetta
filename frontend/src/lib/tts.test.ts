@@ -6,7 +6,14 @@ vi.mock('./api', () => ({
 }));
 
 import { synthesizeSpeech, fetchTtsHealth } from './api';
-import { useTtsStore, __resetTtsForTests, shouldAutoplayFinishedReply } from './tts';
+import { splitIntoSpeechChunks } from './speech-chunks';
+import {
+  useTtsStore,
+  __resetTtsForTests,
+  shouldAutoplayFinishedReply,
+  waitForFillerEnd,
+  waitForTtsIdle,
+} from './tts';
 
 const synth = vi.mocked(synthesizeSpeech);
 const health = vi.mocked(fetchTtsHealth);
@@ -250,5 +257,157 @@ describe('autoplay gating', () => {
     expect(
       shouldAutoplayFinishedReply('chat-1', 'chat-2', true, { role: 'assistant', id: 'old' }, null),
     ).toBe(false);
+  });
+});
+
+describe('filler speech', () => {
+  it('reuses a synthesized filler instead of synthesizing it again', async () => {
+    synth.mockResolvedValue(new Blob(['a']));
+
+    await useTtsStore.getState().speak('filler:1', 'Um momento.');
+    useTtsStore.getState().stop();
+    await useTtsStore.getState().speak('filler:2', 'Um momento.');
+
+    expect(synth).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cache normal replies', async () => {
+    synth.mockResolvedValue(new Blob(['a']));
+
+    await useTtsStore.getState().speak('m1', 'Resposta completa.');
+    useTtsStore.getState().stop();
+    await useTtsStore.getState().speak('m2', 'Resposta completa.');
+
+    expect(synth).toHaveBeenCalledTimes(2);
+  });
+
+  it('waitForFillerEnd resolves immediately when no filler is speaking', async () => {
+    await expect(waitForFillerEnd()).resolves.toBeUndefined();
+  });
+
+  it('waitForFillerEnd waits for a speaking filler to finish', async () => {
+    synth.mockResolvedValue(new Blob(['a']));
+    await useTtsStore.getState().speak('filler:1', 'Um momento.');
+    expect(useTtsStore.getState().state).toBe('speaking');
+
+    let finished = false;
+    const waiting = waitForFillerEnd().then(() => {
+      finished = true;
+    });
+    await Promise.resolve();
+    expect(finished).toBe(false);
+
+    FakeAudio.instances[0].onended?.();
+    await waiting;
+    expect(finished).toBe(true);
+  });
+
+  it('waitForFillerEnd does not wait for a normal reply', async () => {
+    synth.mockResolvedValue(new Blob(['a']));
+    await useTtsStore.getState().speak('m1', 'Resposta completa.');
+
+    await expect(waitForFillerEnd()).resolves.toBeUndefined();
+  });
+});
+
+describe('chunked playback and filler handoff', () => {
+  const LONG = Array.from(
+    { length: 8 },
+    () => 'Esta é uma frase de teste razoavelmente longa para o divisor de trechos.',
+  ).join(' ');
+
+  it('plays a long reply in chunks, synthesizing the next while one plays', async () => {
+    const chunks = splitIntoSpeechChunks(LONG);
+    expect(chunks.length).toBeGreaterThan(2);
+    synth.mockImplementation(async () => new Blob(['wav']));
+
+    await useTtsStore.getState().speak('m1', LONG);
+
+    // First chunk is playing and the second is already being synthesized.
+    expect(FakeAudio.instances).toHaveLength(1);
+    expect(synth).toHaveBeenCalledTimes(2);
+    expect(synth.mock.calls[0][0]).toBe(chunks[0]);
+    expect(useTtsStore.getState().state).toBe('speaking');
+
+    for (let played = 1; played <= chunks.length; played += 1) {
+      await vi.waitFor(() => expect(FakeAudio.instances).toHaveLength(played));
+      expect(useTtsStore.getState().state).toBe('speaking');
+      FakeAudio.instances[played - 1].onended?.();
+    }
+
+    expect(useTtsStore.getState().state).toBe('idle');
+    expect(synth).toHaveBeenCalledTimes(chunks.length);
+    expect(useTtsStore.getState().error).toBeNull();
+  });
+
+  it('stopping mid-reply cancels the remaining chunks', async () => {
+    synth.mockImplementation(async () => new Blob(['wav']));
+    await useTtsStore.getState().speak('m1', LONG);
+
+    useTtsStore.getState().stop();
+    FakeAudio.instances[0].onended?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(FakeAudio.instances).toHaveLength(1);
+    expect(useTtsStore.getState().state).toBe('idle');
+  });
+
+  it('lets a speaking filler finish before the reply starts', async () => {
+    synth.mockImplementation(async () => new Blob(['wav']));
+    await useTtsStore.getState().speak('filler:1', 'Um momento.');
+    const filler = FakeAudio.instances[0];
+
+    const reply = useTtsStore.getState().speak('m1', 'Resposta curta.');
+    await vi.waitFor(() => expect(synth).toHaveBeenCalledTimes(2));
+
+    // The reply is synthesized, yet the filler keeps talking untouched.
+    expect(filler.paused).toBe(false);
+    expect(FakeAudio.instances).toHaveLength(1);
+
+    filler.onended?.();
+    await reply;
+
+    expect(FakeAudio.instances).toHaveLength(2);
+    expect(useTtsStore.getState().speakingId).toBe('m1');
+    expect(useTtsStore.getState().state).toBe('speaking');
+  });
+
+  it('replaces a filler that is still loading instead of waiting for it', async () => {
+    const slowFiller = deferred<Blob>();
+    synth.mockReturnValueOnce(slowFiller.promise);
+    synth.mockResolvedValue(new Blob(['wav']));
+
+    void useTtsStore.getState().speak('filler:1', 'Um momento.');
+    await useTtsStore.getState().speak('m1', 'Resposta curta.');
+    slowFiller.resolve(new Blob(['late']));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(FakeAudio.instances).toHaveLength(1);
+    expect(useTtsStore.getState().speakingId).toBe('m1');
+  });
+});
+
+describe('waitForTtsIdle', () => {
+  it('resolves immediately when nothing is playing', async () => {
+    await expect(waitForTtsIdle()).resolves.toBeUndefined();
+  });
+
+  it('waits until the current utterance ends', async () => {
+    synth.mockResolvedValue(new Blob(['wav']));
+    await useTtsStore.getState().speak('m1', 'Olá.');
+    expect(useTtsStore.getState().state).toBe('speaking');
+
+    let idle = false;
+    const waiting = waitForTtsIdle().then(() => {
+      idle = true;
+    });
+    await Promise.resolve();
+    expect(idle).toBe(false);
+
+    FakeAudio.instances[0].onended?.();
+    await waiting;
+    expect(idle).toBe(true);
   });
 });

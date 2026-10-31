@@ -6,9 +6,7 @@ import {
   Database,
   Info,
   Check,
-  Sun,
   Moon,
-  Monitor,
   Download,
   Upload,
   Trash2,
@@ -18,7 +16,7 @@ import {
   Brain,
   RefreshCw,
 } from 'lucide-react';
-import { useAppStore, type ThemeMode } from '../lib/store';
+import { useAppStore } from '../lib/store';
 import {
   checkHealth,
   fetchSpeechHealth,
@@ -279,12 +277,6 @@ export function MemoryStatusRow({
   );
 }
 
-const themeOptions: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'System', icon: Monitor },
-];
-
 export function SettingsPage() {
   const settings = useAppStore((s) => s.settings);
   const updateSettings = useAppStore((s) => s.updateSettings);
@@ -478,27 +470,18 @@ export function SettingsPage() {
         <div className="flex flex-col gap-4">
           {/* Appearance */}
           <Section title="Appearance">
-            <SettingRow label="Theme" description="Choose how OpenJarvis looks">
-              <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'var(--color-bg-secondary)' }}>
-                {themeOptions.map((opt) => {
-                  const isActive = settings.theme === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => { updateSettings({ theme: opt.value }); showSaved(); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer"
-                      style={{
-                        background: isActive ? 'var(--color-surface)' : 'transparent',
-                        color: isActive ? 'var(--color-text)' : 'var(--color-text-tertiary)',
-                        boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
-                      }}
-                    >
-                      <opt.icon size={14} />
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
+            <SettingRow label="Theme" description="OpenJarvis stays in the holographic dark palette">
+              <span
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium"
+                style={{
+                  background: 'var(--color-accent-subtle)',
+                  color: 'var(--color-accent)',
+                  border: '1px solid var(--color-border)',
+                }}
+              >
+                <Moon size={14} />
+                Dark
+              </span>
             </SettingRow>
             <SettingRow label="Font size">
               <select
@@ -784,55 +767,64 @@ export function SettingsPage() {
 
           {/* Speech */}
           <Section title="Speech">
-            <SettingRow label="Speech-to-Text" description="Enable microphone input for voice dictation">
+            <SettingRow label="Speech-to-Text" description="Always on; the microphone starts only when you press the dictation button">
               <button
-                onClick={() => { updateSettings({ speechEnabled: !settings.speechEnabled }); showSaved(); }}
-                className="relative w-11 h-6 rounded-full transition-colors cursor-pointer"
+                type="button"
+                role="switch"
+                aria-checked="true"
+                aria-label="Speech-to-Text, always on"
+                disabled
+                className="relative w-11 h-6 rounded-full cursor-not-allowed"
                 style={{
-                  background: settings.speechEnabled ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
+                  background: 'var(--color-accent)',
                 }}
               >
                 <span
-                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform bg-white"
+                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white"
                   style={{
-                    transform: settings.speechEnabled ? 'translateX(20px)' : 'translateX(0)',
+                    transform: 'translateX(20px)',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                   }}
                 />
               </button>
             </SettingRow>
-            <SettingRow label="Text-to-Speech" description="Show a read-aloud button on assistant replies">
+            <SettingRow label="Text-to-Speech" description="Always on; shows a read-aloud button on assistant replies">
               <button
-                onClick={() => { updateSettings({ voiceOutputEnabled: !settings.voiceOutputEnabled }); showSaved(); }}
-                className="relative w-11 h-6 rounded-full transition-colors cursor-pointer"
+                type="button"
+                role="switch"
+                aria-checked="true"
+                aria-label="Text-to-Speech, always on"
+                disabled
+                className="relative w-11 h-6 rounded-full cursor-not-allowed"
                 style={{
-                  background: settings.voiceOutputEnabled ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
+                  background: 'var(--color-accent)',
                 }}
               >
                 <span
-                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform bg-white"
+                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white"
                   style={{
-                    transform: settings.voiceOutputEnabled ? 'translateX(20px)' : 'translateX(0)',
+                    transform: 'translateX(20px)',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                   }}
                 />
               </button>
             </SettingRow>
-            <SettingRow label="Speak replies automatically" description="Read every assistant reply aloud as soon as it finishes">
+            <SettingRow label="Speak replies automatically" description="Always on; reads each assistant reply aloud when playback is available">
               <button
-                onClick={() => { updateSettings({ voiceAutoplay: !settings.voiceAutoplay }); showSaved(); }}
-                disabled={!settings.voiceOutputEnabled}
-                className="relative w-11 h-6 rounded-full transition-colors cursor-pointer"
+                type="button"
+                role="switch"
+                aria-checked="true"
+                aria-label="Speak replies automatically, always on"
+                disabled
+                className="relative w-11 h-6 rounded-full cursor-not-allowed"
                 style={{
-                  background: settings.voiceAutoplay && settings.voiceOutputEnabled ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                  opacity: settings.voiceOutputEnabled ? 1 : 0.4,
-                  cursor: settings.voiceOutputEnabled ? 'pointer' : 'default',
+                  background: 'var(--color-accent)',
                 }}
               >
                 <span
-                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform bg-white"
+                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white"
                   style={{
-                    transform: settings.voiceAutoplay && settings.voiceOutputEnabled ? 'translateX(20px)' : 'translateX(0)',
+                    transform: 'translateX(20px)',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                   }}
                 />

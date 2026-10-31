@@ -1,0 +1,9 @@
+{
+  "id": "openjarvis-active-note",
+  "name": "OpenJarvis Nota Ativa",
+  "version": "0.1.0",
+  "minAppVersion": "1.6.0",
+  "description": "Shares only the active note's relative path with the local OpenJarvis server.",
+  "author": "OpenJarvis",
+  "isDesktopOnly": false
+}

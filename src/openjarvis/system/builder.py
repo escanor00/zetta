@@ -483,6 +483,9 @@ class SystemBuilder:
             rate_limiter=rate_limiter,
             agent_id="system:mcp",
             allowed_dirs=validate_allowed_dirs(config.security.allowed_dirs),
+            delete_allowed_dirs=validate_allowed_dirs(
+                getattr(config.security, "delete_allowed_dirs", [])
+            ),
         )
         for tool in internal_server.get_tools():
             self._inject_tool_deps(tool, engine, model, memory_backend, channel_backend)

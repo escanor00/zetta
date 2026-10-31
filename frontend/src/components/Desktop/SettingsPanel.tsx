@@ -23,7 +23,7 @@ function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+        return { ...DEFAULT_SETTINGS, ...JSON.parse(raw), theme: 'dark' };
     }
   } catch {
     // ignore corrupt data
@@ -174,26 +174,7 @@ export function SettingsPanel({ onSettingsChange }: SettingsPanelProps) {
       <div style={styles.fieldGroup}>
         <label style={styles.label}>Theme</label>
         <div style={styles.toggleRow}>
-          <button
-            type="button"
-            style={{
-              ...styles.toggleButton,
-              ...(settings.theme === 'dark' ? styles.toggleActive : {}),
-            }}
-            onClick={() => setSettings((s) => ({ ...s, theme: 'dark' }))}
-          >
-            Dark
-          </button>
-          <button
-            type="button"
-            style={{
-              ...styles.toggleButton,
-              ...(settings.theme === 'light' ? styles.toggleActive : {}),
-            }}
-            onClick={() => setSettings((s) => ({ ...s, theme: 'light' }))}
-          >
-            Light
-          </button>
+          <span style={{ ...styles.toggleButton, ...styles.toggleActive }}>Holographic dark</span>
         </div>
       </div>
 

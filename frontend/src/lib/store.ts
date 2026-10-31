@@ -112,7 +112,7 @@ interface Settings {
 
 function loadSettings(): Settings {
   const defaults: Settings = {
-    theme: 'system',
+    theme: 'dark',
     apiUrl: '',
     apiKey: '',
     fontSize: 'default',
@@ -120,14 +120,21 @@ function loadSettings(): Settings {
     defaultAgent: '',
     temperature: 0.7,
     maxTokens: 4096,
-    speechEnabled: false,
-    voiceOutputEnabled: false,
-    voiceAutoplay: false,
+    speechEnabled: true,
+    voiceOutputEnabled: true,
+    voiceAutoplay: true,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return defaults;
-    return { ...defaults, ...JSON.parse(raw) };
+    return {
+      ...defaults,
+      ...JSON.parse(raw),
+      theme: 'dark',
+      speechEnabled: true,
+      voiceOutputEnabled: true,
+      voiceAutoplay: true,
+    };
   } catch {
     return defaults;
   }
@@ -160,6 +167,7 @@ interface AppState {
   modelsLoading: boolean;
   selectedModel: string;
   serverInfo: ServerInfo | null;
+  apiReachable: boolean | null;
   savings: SavingsData | null;
 
   // Settings
@@ -212,6 +220,7 @@ interface AppState {
   setModelsLoading: (loading: boolean) => void;
   setSelectedModel: (model: string) => void;
   setServerInfo: (info: ServerInfo | null) => void;
+  setApiReachable: (reachable: boolean | null) => void;
   setSavings: (data: SavingsData | null) => void;
   incrementSavings: (usage: TokenUsage) => void;
 
@@ -284,12 +293,13 @@ export const useAppStore = create<AppState>((set, get) => {
     modelsLoading: true,
     selectedModel: '',
     serverInfo: null,
+    apiReachable: null,
     savings: null,
 
     settings: loadSettings(),
 
     commandPaletteOpen: false,
-    sidebarOpen: true,
+    sidebarOpen: false,
     systemPanelOpen: true,
 
     optInEnabled: localStorage.getItem(OPTIN_KEY) === 'true',
@@ -515,6 +525,7 @@ export const useAppStore = create<AppState>((set, get) => {
     setModelsLoading: (loading: boolean) => set({ modelsLoading: loading }),
     setSelectedModel: (model: string) => set({ selectedModel: model }),
     setServerInfo: (info: ServerInfo | null) => set({ serverInfo: info }),
+    setApiReachable: (reachable: boolean | null) => set({ apiReachable: reachable }),
     setSavings: (data: SavingsData | null) => set({ savings: data }),
     incrementSavings: (usage: TokenUsage) => {
       const cur = get().savings;
@@ -543,7 +554,13 @@ export const useAppStore = create<AppState>((set, get) => {
     // ── Settings ───────────────────────────────────────────────────
 
     updateSettings: (partial: Partial<Settings>) => {
-      const updated = { ...get().settings, ...partial };
+      const updated = {
+        ...get().settings,
+        ...partial,
+        speechEnabled: true,
+        voiceOutputEnabled: true,
+        voiceAutoplay: true,
+      };
       saveSettings(updated);
       set({ settings: updated });
     },

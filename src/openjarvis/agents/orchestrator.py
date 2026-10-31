@@ -27,6 +27,8 @@ from openjarvis.tools._stubs import BaseTool
 
 logger = logging.getLogger(__name__)
 
+_MAX_EMPTY_RETRIES = 2
+
 
 @AgentRegistry.register("orchestrator")
 class OrchestratorAgent(ToolUsingAgent):
@@ -364,6 +366,7 @@ class OrchestratorAgent(ToolUsingAgent):
         turns = 0
         total_prompt_tokens = 0
         total_completion_tokens = 0
+        empty_retries = 0
 
         for _turn in range(self._max_turns):
             turns += 1
@@ -390,6 +393,21 @@ class OrchestratorAgent(ToolUsingAgent):
             if not raw_tool_calls:
                 content = self._check_continuation(result, messages)
                 content = self._strip_think_tags(content)
+                # Small models sometimes return nothing right after a tool
+                # result; nudge them instead of ending the turn with silence.
+                if not content.strip() and empty_retries < _MAX_EMPTY_RETRIES:
+                    empty_retries += 1
+                    messages.append(
+                        Message(
+                            role=Role.USER,
+                            content=(
+                                "Sua resposta veio vazia. Continue a tarefa: "
+                                "chame a ferramenta necessária ou responda ao "
+                                "usuário com o resultado."
+                            ),
+                        ),
+                    )
+                    continue
                 self._emit_turn_end(turns=turns, content_length=len(content))
                 return AgentResult(
                     content=content,

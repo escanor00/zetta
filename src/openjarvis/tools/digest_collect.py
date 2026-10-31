@@ -24,6 +24,7 @@ _SECTION_ORDER: List[tuple] = [
         {
             "gmail",
             "gmail_imap",
+            "imap",
             "google_tasks",
             "slack",
             "imessage",
@@ -340,6 +341,7 @@ _FORMATTERS: Dict[str, Any] = {
     "strava": _format_strava,
     "gmail": _format_gmail,
     "gmail_imap": _format_gmail_imap,
+    "imap": _format_gmail_imap,
     "google_tasks": _format_google_tasks,
     "slack": _format_slack,
     "imessage": _format_imessage,

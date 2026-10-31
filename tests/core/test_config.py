@@ -253,6 +253,29 @@ class TestAgentConfigNew:
         prompt = AgentConfig().default_system_prompt
         assert "OpenJarvis" in prompt
         assert "not Claude" in prompt
+        assert "verified the result" in prompt
+        assert "Ask a concise clarifying question" in prompt
+        assert "authorization are clear" in prompt
+        assert "Protect private information and secrets" in prompt
+        assert "Track the user's stated goal, constraints, preferences" in prompt
+        assert "Anticipate likely follow-up needs" in prompt
+        assert "matching the user's language" in prompt
+        assert "concrete, realistic sequence" in prompt
+        assert "deadlines, available time, basic needs, and dependencies" in prompt
+        assert "Do not offer reminders, timers" in prompt
+        assert "carry out the requested work" in prompt
+        assert "Do not ask for details that are unnecessary" in prompt
+        assert "Prioritize usefulness over generic advice" in prompt
+        assert "Never promise persistent memory" in prompt
+        assert "local/offline model inference from access to the computer" in prompt
+        assert "explicitly available in the current request or agent harness" in prompt
+        assert "Never replace a failed operation with an invented answer" in prompt
+        assert "inspect the relevant repository files and existing tests" in prompt
+        assert "Trace the actual call path" in prompt
+        assert "identify the root cause" in prompt
+        assert "focused regression test" in prompt
+        assert "Report exact validation commands and outcomes" in prompt
+        assert "without confirming it through available tools" in prompt
 
 
 class TestNestedEngineConfig:

@@ -238,6 +238,7 @@ DEFAULT_TOOL_CAPABILITIES: Dict[str, List[str]] = {
         Capability.CHANNEL_SEND,
         Capability.NETWORK_FETCH,
     ],
+    "file_delete": [Capability.FILE_WRITE],
     "file_read": [Capability.FILE_READ],
     "file_write": [Capability.FILE_WRITE],
     "get_pending_actions": [Capability.MEMORY_READ],

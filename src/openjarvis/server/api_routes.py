@@ -1005,6 +1005,18 @@ async def transcribe_speech(request: Request):
     audio_bytes = await audio_file.read()
     language = form.get("language")
 
+    if not language:
+       config = getattr(request.app.state, "config", None)
+       if config is None:
+          from openjarvis.core.config import load_config
+          config = load_config()
+
+    language = getattr(
+        getattr(config, "speech", None),
+        "language",
+        "pt",
+    )
+
     # Detect format from filename
     filename = getattr(audio_file, "filename", "audio.wav")
     ext = filename.rsplit(".", 1)[-1] if "." in filename else "wav"
@@ -1091,7 +1103,7 @@ async def _resolve_tts_backend(request: Request):
                 config = load_config()
 
             preferred, _, _ = voice_preferences(config)
-            return get_tts_backend(preferred)
+            return get_tts_backend(preferred, config=config)
 
         task = asyncio.create_task(asyncio.to_thread(discover))
         app.state.tts_resolution_task = task

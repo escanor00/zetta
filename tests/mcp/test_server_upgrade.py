@@ -71,6 +71,31 @@ class TestAutoDiscovery:
         names = {t["name"] for t in resp.result["tools"]}
         assert "calculator" in names
         assert "think" in names
+        assert "file_write" in names
+
+    def test_auto_discover_file_write_uses_allowed_dirs(self, tmp_path):
+        server = MCPServer(allowed_dirs=[str(tmp_path)])
+        file_write = next(
+            tool for tool in server.get_tools() if tool.spec.name == "file_write"
+        )
+
+        result = file_write.execute(
+            path="Ideas.canvas",
+            content='{"nodes":[],"edges":[]}',
+        )
+
+        assert result.success is True
+        assert (tmp_path / "Ideas.canvas").read_text(encoding="utf-8") == (
+            '{"nodes":[],"edges":[]}'
+        )
+
+    def test_file_write_has_destructive_annotation(self):
+        server = MCPServer()
+        resp = server.handle(MCPRequest(method="tools/list", id=1))
+        file_write = next(t for t in resp.result["tools"] if t["name"] == "file_write")
+
+        assert file_write["annotations"]["readOnlyHint"] is False
+        assert file_write["annotations"]["destructiveHint"] is True
 
     def test_auto_discover_includes_storage_tools(self):
         """Auto-discovered server should include storage tools."""

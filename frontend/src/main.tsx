@@ -10,18 +10,8 @@ import { initAnalytics } from './lib/analytics';
 import './index.css';
 
 function applyTheme() {
-  try {
-    const raw = localStorage.getItem('openjarvis-settings');
-    const settings = raw ? JSON.parse(raw) : {};
-    const theme = settings.theme || 'system';
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light');
-    } else if (theme === 'light') {
-      document.documentElement.classList.add('light');
-      document.documentElement.classList.remove('dark');
-    }
-  } catch { /* use system default */ }
+  document.documentElement.classList.add('dark');
+  document.documentElement.classList.remove('light');
 }
 
 applyTheme();

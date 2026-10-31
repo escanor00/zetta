@@ -138,7 +138,15 @@ def create_connectors_router():
         """Return a cached connector instance, creating it if needed."""
         if connector_id not in _instances:
             cls = ConnectorRegistry.get(connector_id)
-            _instances[connector_id] = cls()
+            if connector_id == "obsidian":
+                # Restore the vault saved under [obsidian] in the config.
+                from openjarvis.core.config import load_config
+
+                _instances[connector_id] = cls(
+                    vault_path=load_config().obsidian.vault_path
+                )
+            else:
+                _instances[connector_id] = cls()
         return _instances[connector_id]
 
     def _connector_summary(connector_id: str, instance: Any) -> Dict[str, Any]:

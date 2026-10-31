@@ -38,11 +38,13 @@ def get_tts_backend(
     preferred: str = "",
     *,
     attempted: Optional[set[str]] = None,
+    config: Optional["JarvisConfig"] = None,
 ) -> Optional[Any]:
     """Return the first healthy TTS backend, preferring *preferred*.
 
     ``attempted`` lets a caller carry state across calls so a backend that
     already failed is not retried; it is mutated in place.
+    ``config`` is used to pass backend-specific configuration.
     """
     # Import triggers built-in backend registration only when voice output is
     # actually requested.
@@ -58,7 +60,17 @@ def get_tts_backend(
         if not TTSRegistry.contains(key):
             continue
         try:
-            candidate = TTSRegistry.get(key)()
+            # Passa configurações específicas do backend se disponíveis
+            kwargs = {}
+            if config is not None and key == "kokoro":
+                speech_cfg = getattr(config, "speech", None)
+                if speech_cfg:
+                    if hasattr(speech_cfg, "tts_device"):
+                        kwargs["device"] = speech_cfg.tts_device
+                    if hasattr(speech_cfg, "tts_max_cached_pipelines"):
+                        kwargs["max_cached_pipelines"] = speech_cfg.tts_max_cached_pipelines
+
+            candidate = TTSRegistry.get(key)(**kwargs)
             if candidate.health():
                 return candidate
         except Exception:

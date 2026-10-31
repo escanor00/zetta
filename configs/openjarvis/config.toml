@@ -22,7 +22,7 @@ repetition_penalty = 1.0
 [agent]
 default_agent = "native_openhands"        # CodeAct-style agent
 max_turns = 10                            # Up to 10 tool-calling turns
-tools = "code_interpreter,web_search,file_read,calculator,think"
+tools = "code_interpreter,web_search,file_read,file_list,file_write,calculator,think"
 objective = "Answer questions accurately using available tools"
 context_from_memory = false               # No memory injection during eval
 
@@ -122,3 +122,49 @@ db_path = "~/.openjarvis/traces.db"
 host = "127.0.0.1"
 port = 8000
 agent = "native_openhands"
+
+[security]
+allowed_dirs = []
+
+# ═══════════════════════════════════════════════════════════════
+# Voice Input/Output Configuration
+# ═══════════════════════════════════════════════════════════════
+[voice]
+# Configurações de gravação e detecção de silêncio
+sample_rate = 16000
+silence_threshold = 500              # RMS abaixo disto = silêncio
+silence_seconds = 1.5                # segundos de silêncio antes de parar
+startup_silence_seconds = 5.0        # desiste se nunca começar a falar
+max_record_seconds = 30              # limite de segurança
+
+# Interrupção da fala do assistente
+# IMPORTANTE: só ative interrupt_by_voice com fones de ouvido!
+# Com caixas de som, o microfone ouve o assistente e ele se interrompe sozinho
+interrupt_by_voice = false           # interromper falando por cima (requer fones)
+voice_interrupt_threshold = 600      # volume mínimo da sua voz para interromper
+voice_interrupt_chunks = 3           # quantos pedaços "com voz" necessários
+voice_interrupt_window = 6           # entre os últimos N pedaços
+interrupt_chunk_size = 512           # pedaços menores = reação mais rápida
+
+[voice.tts]
+# Text-to-Speech (TTS)
+backend = "kokoro"                   # backend de síntese de voz
+device = "cpu"                       # "cpu", "cuda", ou "auto" (detecta GPU)
+voice_id = "af_heart"                # voz padrão (inglês americano feminina)
+speed = 1.0                          # velocidade da fala (0.5 = lento, 2.0 = rápido)
+max_cached_pipelines = 4             # quantos idiomas manter em cache
+
+# ═══════════════════════════════════════════════════════════════
+# Speech-to-Text e Text-to-Speech (sistema reconhece apenas [speech])
+# ═══════════════════════════════════════════════════════════════
+[speech]
+backend = "faster-whisper"
+model = "base"
+device = "cpu"
+compute_type = "int8"
+language = ""
+tts_backend = "kokoro"
+tts_device = "cpu"                   # device para TTS (será passado ao backend)
+tts_max_cached_pipelines = 4
+voice_id = "af_heart"
+voice_speed = 1.0

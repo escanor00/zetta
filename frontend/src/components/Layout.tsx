@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router';
 import { ApprovalBell } from './ApprovalBell';
 import { Sidebar } from './Sidebar/Sidebar';
@@ -8,7 +8,8 @@ import { checkHealth } from '../lib/api';
 
 export function Layout() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
-  const [apiReachable, setApiReachable] = useState<boolean | null>(null);
+  const apiReachable = useAppStore((s) => s.apiReachable);
+  const setApiReachable = useAppStore((s) => s.setApiReachable);
 
   useEffect(() => {
     const check = () => checkHealth().then(setApiReachable);

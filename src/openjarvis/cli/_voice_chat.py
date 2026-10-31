@@ -116,14 +116,39 @@ class VoiceSession:
         self._tts_backend = None
 
 
+_HANDS_FREE = False  # True = continua ouvindo sem pedir Enter
+
+
 def read_voice_input(console: Any, session: VoiceSession) -> Optional[str] | object:
-    """Accept a typed command/message, or record after an empty submission."""
+    """Accept a typed message, or record after an empty submission.
+
+    Depois da primeira fala bem-sucedida, continua ouvindo sozinho até haver
+    silêncio; aí volta a pedir Enter.
+    """
+    global _HANDS_FREE
+
+    if _HANDS_FREE:
+        result = record_voice(console, session)
+        if not isinstance(result, str):
+            # silêncio (None) ou saída (VOICE_EXIT): volta ao modo normal
+            _HANDS_FREE = False
+            if result is None:
+                console.print(
+                    "[dim]Silêncio — voltando ao modo normal (Enter para falar).[/dim]"
+                )
+        return result
+
     try:
         typed = input("You> [type, or press Enter to speak] ")
     except (EOFError, KeyboardInterrupt):
         return VOICE_EXIT
     typed = typed.strip()
-    return typed if typed else record_voice(console, session)
+    if typed:
+        return typed
+    result = record_voice(console, session)
+    if isinstance(result, str):
+        _HANDS_FREE = True
+    return result
 
 
 def record_voice(
@@ -173,9 +198,121 @@ def record_voice(
         return None
 
 
+def _limpar_para_fala(text: str) -> str:
+    """Remove formatação Markdown para a voz não ler símbolos."""
+    import re
+
+    text = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)  # blocos de código
+    text = re.sub(r"`([^`]*)`", r"\1", text)  # `código`
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", text)  # imagens
+    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)  # [texto](link)
+    text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.MULTILINE)  # títulos
+    text = re.sub(r"^\s*[-*•]\s+", "", text, flags=re.MULTILINE)  # marcadores
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)  # negrito
+    text = text.replace("*", "").replace("#", "")  # sobras
+    text = re.sub(
+        "[\U0001F000-\U0001FAFF"  # emojis e pictogramas
+        "\U00002600-\U000027BF"  # símbolos diversos (✅ ❤ ✨ ⚠ ...)
+        "\U00002300-\U000023FF"  # técnicos (⌚ ⏰ ...)
+        "\U00002B00-\U00002BFF"  # estrelas e setas (⭐ ...)
+        "\U0000FE00-\U0000FE0F"  # seletores de variação
+        "\U0000200D\U000020E3]+",  # junção de emojis e "keycap"
+        "",
+        text,
+    )  # emojis
+    text = re.sub(r"[ \t]+", " ", text)
+    return text.strip()
+
+
+def _dividir_em_frases(text: str, minimo: int = 40) -> list[str]:
+    """Divide o texto em frases; junta as muito curtas para a voz não picotar."""
+    import re
+
+    partes = re.split(r"(?<=[.!?…])\s+|\n+", text)
+    frases: list[str] = []
+    atual = ""
+    for parte in partes:
+        parte = parte.strip()
+        if not parte:
+            continue
+        atual = f"{atual} {parte}".strip()
+        if len(atual) >= minimo:
+            frases.append(atual)
+            atual = ""
+    if atual:
+        if frases:
+            frases[-1] += " " + atual
+        else:
+            frases.append(atual)
+    return frases
+
+
+def _falar_em_frases(
+    backend: Any,
+    frases: list[str],
+    synth_kwargs: dict[str, Any],
+    play_wav: Any,
+    foi_interrompido: Any,
+) -> None:
+    """Fala frase por frase: enquanto uma toca, a próxima já está sendo gerada.
+
+    A primeira frase começa a tocar muito antes de o texto inteiro ser gerado.
+    """
+    import queue
+    import threading
+
+    fila: queue.Queue = queue.Queue(maxsize=2)
+    parar = threading.Event()
+
+    def colocar(item: Any) -> None:
+        while not parar.is_set():
+            try:
+                fila.put(item, timeout=0.2)
+                return
+            except queue.Full:
+                continue
+
+    def produzir() -> None:
+        try:
+            for i, frase in enumerate(frases):
+                if parar.is_set():
+                    break
+                colocar((i, backend.synthesize(frase, **synth_kwargs)))
+        except Exception as exc:  # repassa o erro para a thread principal
+            colocar(exc)
+        finally:
+            colocar(None)
+
+    threading.Thread(target=produzir, daemon=True).start()
+    try:
+        while True:
+            item = fila.get()
+            if item is None:
+                break
+            if isinstance(item, Exception):
+                raise item
+            i, resultado = item
+            if resultado.audio:
+                # A pausa contra eco só vale depois da última frase.
+                play_wav(
+                    resultado.audio,
+                    sample_rate=resultado.sample_rate,
+                    echo_pause=(i == len(frases) - 1),
+                )
+                if foi_interrompido():
+                    break
+    finally:
+        parar.set()
+
+
 def speak(text: str, console: Any, session: VoiceSession | None = None) -> None:
     """Synthesize and play text, reusing a healthy backend for the session."""
-    from openjarvis.speech.voice_io import play_wav
+    text = _limpar_para_fala(text)
+    if not text:  # nada para falar (ex.: a resposta era só um bloco de código)
+        return
+    from openjarvis.cli.voice_io import play_wav, was_interrupted
+
+    frases = _dividir_em_frases(text) or [text]
 
     active_session = session or VoiceSession()
 
@@ -193,9 +330,7 @@ def speak(text: str, console: Any, session: VoiceSession | None = None) -> None:
             synth_kwargs: dict[str, Any] = {"output_format": "wav", "speed": speed}
             if voice_id:
                 synth_kwargs["voice_id"] = voice_id
-            result = backend.synthesize(text, **synth_kwargs)
-            if result.audio:
-                play_wav(result.audio, sample_rate=result.sample_rate)
+            _falar_em_frases(backend, frases, synth_kwargs, play_wav, was_interrupted)
             return
         except Exception as exc:
             console.print(

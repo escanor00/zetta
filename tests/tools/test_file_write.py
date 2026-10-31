@@ -43,6 +43,24 @@ class TestFileWriteTool:
         assert result.success is True
         assert f.read_text(encoding="utf-8") == "line1\nline2\n"
 
+    def test_append_does_not_duplicate_resent_existing_content(self, tmp_path):
+        # Models read a note, then resend all of it with mode="append".
+        f = tmp_path / "nota.md"
+        f.write_text("# Titulo", encoding="utf-8")
+        tool = FileWriteTool()
+        result = tool.execute(
+            path=str(f), content="# Titulo\nlinha nova\n", mode="append"
+        )
+        assert result.success is True
+        assert f.read_text(encoding="utf-8") == "# Titulo\nlinha nova\n"
+
+    def test_append_keeps_text_that_merely_resembles_existing(self, tmp_path):
+        f = tmp_path / "nota.md"
+        f.write_text("abc", encoding="utf-8")
+        tool = FileWriteTool()
+        tool.execute(path=str(f), content="ab", mode="append")
+        assert f.read_text(encoding="utf-8") == "abcab"
+
     def test_create_dirs(self, tmp_path):
         f = tmp_path / "sub" / "deep" / "test.txt"
         tool = FileWriteTool()

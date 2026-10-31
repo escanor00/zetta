@@ -356,3 +356,48 @@ def test_configure_writes_private_atomic_config(tmp_path):
     assert connector.is_connected()
     if os.name != "nt":
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_feed_summary_html_is_stripped_before_truncation():
+    from openjarvis.connectors.news_rss import _parse_rss_items
+
+    xml = (
+        '<rss version="2.0"><channel><item><title>Titulo</title>'
+        '<description><![CDATA[<img src="https://x/y.jpg" alt="foto"> '
+        "Texto &amp; mais texto <a href='https://z'>link</a>]]></description>"
+        "</item></channel></rss>"
+    )
+
+    [item] = _parse_rss_items(xml)
+
+    assert item["description"] == "Texto & mais texto link"
+
+
+def test_feed_without_header_charset_uses_the_xml_declaration():
+    import httpx
+
+    from openjarvis.connectors.news_rss import _decode_feed, _parse_rss_items
+
+    body = (
+        '<?xml version="1.0" encoding="ISO-8859-1" ?>'
+        "<rss><channel><item><title>Ação e opinião</title></item></channel></rss>"
+    ).encode("iso-8859-1")
+    resp = httpx.Response(200, headers={"Content-Type": "text/xml"}, content=body)
+
+    [item] = _parse_rss_items(_decode_feed(resp))
+
+    assert item["title"] == "Ação e opinião"
+
+
+def test_feed_header_charset_still_wins():
+    import httpx
+
+    from openjarvis.connectors.news_rss import _decode_feed
+
+    resp = httpx.Response(
+        200,
+        headers={"Content-Type": "application/rss+xml; charset=utf-8"},
+        content="<rss>acentuação</rss>".encode("utf-8"),
+    )
+
+    assert _decode_feed(resp) == "<rss>acentuação</rss>"

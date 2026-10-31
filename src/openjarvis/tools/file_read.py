@@ -32,7 +32,10 @@ class FileReadTool(BaseTool):
     def spec(self) -> ToolSpec:
         return ToolSpec(
             name="file_read",
-            description=("Read the contents of a file. Returns the text content."),
+            description=(
+                "Read the contents of a text file, including Obsidian Markdown "
+                "notes and JSON Canvas (.canvas) files. Returns the text content."
+            ),
             parameters={
                 "type": "object",
                 "properties": {

@@ -32,7 +32,12 @@ class FileWriteTool(BaseTool):
     def spec(self) -> ToolSpec:
         return ToolSpec(
             name="file_write",
-            description=("Write content to a file. Supports write and append modes."),
+            description=(
+                "Create or edit text files, including Obsidian Markdown notes "
+                "and JSON Canvas (.canvas) files. Read an existing file before "
+                "editing it and preserve content the user did not ask to change. "
+                "Canvas files use JSON Canvas with top-level nodes and edges."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -47,8 +52,12 @@ class FileWriteTool(BaseTool):
                     "mode": {
                         "type": "string",
                         "description": (
-                            "Write mode: 'write' (overwrite/create)"
-                            " or 'append' (append to existing)."
+                            "Write mode: 'write' replaces the whole file, so"
+                            " 'content' must be the complete final text"
+                            " (existing content plus your change)."
+                            " 'append' adds 'content' to the end of the file,"
+                            " so 'content' must contain ONLY the new text;"
+                            " never resend text that is already in the file."
                             " Default: 'write'."
                         ),
                     },
@@ -180,9 +189,18 @@ class FileWriteTool(BaseTool):
                 )
         else:
             # append mode — always Python
+            to_append = content
+            try:
+                existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+            except (OSError, UnicodeDecodeError):
+                existing = ""
+            if existing and content.startswith(existing):
+                # Models often read a note and resend it whole with mode=append,
+                # which would duplicate it. Add only the text that is new.
+                to_append = content[len(existing) :]
             try:
                 with open(path, "a", encoding="utf-8") as f:
-                    f.write(content)
+                    f.write(to_append)
             except PermissionError as exc:
                 return ToolResult(
                     tool_name="file_write",

@@ -434,7 +434,15 @@ class ToolExecutor:
         # Execute with timeout
         timeout = tool.spec.timeout_seconds or self._default_timeout
         t0 = time.time()
-        future = _TOOL_RUNNER.submit(tool.execute, **params)
+        execution_params = params
+        if tool_call.name == "file_delete":
+            from openjarvis.tools._request_context import get_tool_request_context
+
+            execution_params = {
+                **params,
+                "_request_context": get_tool_request_context(),
+            }
+        future = _TOOL_RUNNER.submit(tool.execute, **execution_params)
         try:
             if future is None:
                 result = ToolResult(
