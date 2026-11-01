@@ -36,6 +36,25 @@ async def news_headlines(limit: int = Query(6, ge=1, le=20)) -> dict[str, Any]:
     return await run_in_threadpool(fetch_headlines_cached, limit)
 
 
+@router.get("/v1/youtube/feed")
+async def youtube_feed(limit: int = Query(8, ge=1, le=24)) -> dict[str, Any]:
+    """Newest videos from the tech and VR channels, for the YouTube panel."""
+    from openjarvis.connectors.youtube_feed import fetch_youtube_feed_cached
+
+    return await run_in_threadpool(fetch_youtube_feed_cached, limit)
+
+
+@router.get("/v1/search")
+async def web_search_results(
+    q: str = Query(..., min_length=1, max_length=200),
+    limit: int = Query(6, ge=1, le=10),
+) -> dict[str, Any]:
+    """Top web results for the HUD quick-search panel."""
+    from openjarvis.connectors.web_search import web_search
+
+    return await run_in_threadpool(web_search, q, limit)
+
+
 @router.get("/v1/morning/recap")
 async def morning_recap() -> dict[str, str]:
     """Text the assistant speaks while the morning digest is being prepared.

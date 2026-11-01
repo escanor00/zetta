@@ -48,6 +48,21 @@ except ImportError:
     pass
 
 try:
+    import openjarvis.tools.system_stats  # noqa: F401
+except ImportError:
+    pass
+
+try:
+    import openjarvis.tools.search_notes  # noqa: F401
+except ImportError:
+    pass
+
+try:
+    import openjarvis.tools.save_conversation_note  # noqa: F401
+except ImportError:
+    pass
+
+try:
     import openjarvis.tools.fx_macro  # noqa: F401
 except ImportError:
     pass

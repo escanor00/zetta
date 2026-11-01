@@ -21,3 +21,24 @@ export function shouldRunMorningBriefing(
 export function isMorningForced(search: string): boolean {
   return new URLSearchParams(search).get('morning') === '1';
 }
+
+/** Greeting for the user's local clock: 5-11 morning, 12-17 afternoon, else night. */
+export function timeGreeting(date: Date = new Date()): string {
+  const hour = date.getHours();
+  if (hour >= 5 && hour < 12) return 'Bom dia';
+  if (hour >= 12 && hour < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+/** Replaces every `{saudacao}` in a recap with the greeting for `date`. */
+export function fillGreeting(text: string, date: Date = new Date()): string {
+  return text.split('{saudacao}').join(timeGreeting(date));
+}
+
+const LEADING_GREETING =
+  /^\s*(?:bom dia|boa tarde|boa noite)\b(?:,\s*\p{Lu}\p{L}*)?[\s,.!:;-]*/iu;
+
+/** Drops a greeting ("Bom dia, Luiz.") from the start of a text, if there is one. */
+export function stripLeadingGreeting(text: string): string {
+  return text.replace(LEADING_GREETING, '');
+}

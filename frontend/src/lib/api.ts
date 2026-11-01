@@ -450,6 +450,43 @@ export async function fetchSystemStats(): Promise<SystemStats | null> {
   }
 }
 
+export interface ClaudeUsageWindow {
+  tokens: number;
+  limit: number | null;
+  percent: number | null;
+}
+
+export interface ClaudeUsage {
+  calibrated: boolean;
+  five_hour: ClaudeUsageWindow;
+  weekly: ClaudeUsageWindow;
+}
+
+/** Claude Code token use (5 h and weekly); `null` when the backend cannot be reached. */
+export async function fetchClaudeUsage(): Promise<ClaudeUsage | null> {
+  try {
+    const res = await apiFetch(`/v1/claude/usage`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+/** Sets the limits so current use matches the percentages shown by Claude. */
+export async function calibrateClaudeUsage(
+  fiveHourPercent: number,
+  weeklyPercent: number,
+): Promise<ClaudeUsage> {
+  const res = await apiFetch(`/v1/claude/usage/calibrate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ five_hour_percent: fiveHourPercent, weekly_percent: weeklyPercent }),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.detail ?? 'Falha ao calibrar');
+  return res.json();
+}
+
 export interface UnreadMessage {
   uid: number;
   from: string;
@@ -531,6 +568,48 @@ export interface Headlines {
 export async function fetchHeadlines(limit = 6): Promise<Headlines | null> {
   try {
     const res = await apiFetch(`/v1/news/headlines?limit=${limit}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export interface YoutubeVideo {
+  id: string;
+  title: string;
+  channel: string;
+  published: string | null;
+  thumbnail: string;
+}
+
+export interface YoutubeFeed {
+  items: YoutubeVideo[];
+  error?: string;
+}
+
+/** Newest videos from the tech and VR channels; `null` when the backend is down. */
+export async function fetchYoutubeFeed(limit = 8): Promise<YoutubeFeed | null> {
+  try {
+    const res = await apiFetch(`/v1/youtube/feed?limit=${limit}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export interface SearchResult {
+  title: string;
+  link: string;
+  host: string;
+  snippet: string;
+}
+
+/** Top web results for a quick search; `null` when the backend is down. */
+export async function fetchSearch(query: string): Promise<{ items: SearchResult[]; error?: string } | null> {
+  try {
+    const res = await apiFetch(`/v1/search?q=${encodeURIComponent(query)}&limit=6`);
     if (!res.ok) return null;
     return res.json();
   } catch {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import {
   Activity,
   BarChart3,
@@ -16,7 +16,13 @@ import {
 import { ChatArea } from '../components/Chat/ChatArea';
 import { XRayFooter } from '../components/Chat/XRayFooter';
 import { NewsPanel } from '../components/NewsPanel';
+import { SearchPanel } from '../components/SearchPanel';
+import { SitePanel } from '../components/SitePanel';
+import { NoteCards } from '../components/NoteCards';
+import { ClaudeUsagePanel } from '../components/ClaudeUsagePanel';
+import { parseNoteHits } from '../lib/notes';
 import { UnreadMailPanel } from '../components/UnreadMailPanel';
+import { SITES, type SiteId } from '../lib/sites';
 import { useMorningBriefing } from '../hooks/useMorningBriefing';
 import { useNews } from '../hooks/useNews';
 import { useUnreadMail } from '../hooks/useUnreadMail';
@@ -135,6 +141,17 @@ function getToolStatusLabel(status: ToolCallInfo['status'], latency?: number): s
 
 export function ChatPageWithVideo() {
   const [chatOpen, setChatOpen] = useState(false);
+  const [openSites, setOpenSites] = useState<SiteId[]>(() => SITES.filter((site) => site.embeddable).map((site) => site.id));
+  const [usageOpen, setUsageOpen] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(true);
+  const [dismissedNotes, setDismissedNotes] = useState('');
+  const toggleSite = (id: SiteId) =>
+    setOpenSites((current) => (current.includes(id) ? current.filter((s) => s !== id) : [...current, id]));
+  // Click a side panel's title to fold it down to just the title.
+  const foldSidePanel = (event: MouseEvent<HTMLElement>) => {
+    const title = (event.target as HTMLElement).closest('.hud-col > section > :first-child');
+    title?.parentElement?.classList.toggle('is-folded');
+  };
   const [activityVisible, setActivityVisible] = useState(true);
   const [systemPanelVisible, setSystemPanelVisible] = useState(true);
   const [signalPanelVisible, setSignalPanelVisible] = useState(true);
@@ -192,6 +209,12 @@ export function ChatPageWithVideo() {
       ? streamState.activeToolCalls
       : latestAssistantMessage?.toolCalls ?? []
   ).slice(-4);
+  const noteHits = parseNoteHits(
+    [...(isProcessing ? streamState.activeToolCalls : latestAssistantMessage?.toolCalls ?? [])]
+      .reverse()
+      .find((toolCall) => toolCall.tool === 'search_notes' && toolCall.result)?.result,
+  );
+  const noteKey = noteHits.map((note) => note.path).join('|');
   const runningTool = [...visibleToolCalls].reverse().find((toolCall) => toolCall.status === 'running');
   const activityPhaseLabel = getActivityPhaseLabel(
     streamState.phase,
@@ -225,6 +248,19 @@ export function ChatPageWithVideo() {
     : serverConnected
       ? 'ATIVO'
       : 'INATIVO';
+  // One word for the header: what Zetta is doing right now, most urgent first.
+  const systemState =
+    apiReachable === false
+      ? { label: 'OFFLINE', tone: 'is-offline' }
+      : isSpeaking
+        ? { label: 'FALANDO', tone: 'is-active' }
+        : isProcessing
+          ? { label: 'PENSANDO', tone: 'is-busy' }
+          : wakeStatus === 'transcribing'
+            ? { label: 'TRANSCREVENDO', tone: 'is-busy' }
+            : wakeStatus === 'listening' || wakeStatus === 'conversation'
+              ? { label: 'ESCUTANDO', tone: 'is-active' }
+              : { label: 'ONLINE', tone: '' };
   const voiceStatus = isSpeaking
     ? 'FALANDO'
     : ttsState === 'loading'
@@ -446,8 +482,10 @@ export function ChatPageWithVideo() {
       <div className={`hologram-stage flex-1 ${isSpeaking ? 'is-speaking' : ''} ${isProcessing ? 'is-processing' : ''} ${radarPaused ? 'is-radar-paused' : ''} ${focusMode ? 'is-focus-mode' : ''} ${activityVisible ? '' : 'is-activity-hidden'} ${systemPanelVisible ? '' : 'is-system-hidden'} ${signalPanelVisible ? '' : 'is-signal-hidden'}`}>
         <div className="hologram-header">
           <div className="hologram-brand">
-            <span className="hologram-status-dot" />
-            <span>OPENJARVIS <span className="hologram-brand-divider">//</span> COGNIÇÃO TÁTICA</span>
+            <span className={`hologram-status-dot ${systemState.tone}`} />
+            <span role="status">
+              ZETTA <span className="hologram-brand-divider">//</span> SISTEMA {systemState.label}
+            </span>
           </div>
           <div className="hologram-header-readouts" aria-label="Telemetria atual da sessão">
             <span>MODELO <b title={selectedModel || 'Nenhum modelo selecionado'}>{selectedModel || 'SEM MODELO'}</b></span>
@@ -486,6 +524,47 @@ export function ChatPageWithVideo() {
                 {newsHasNew && !newsOpen && <i className="hologram-chat-toggle-indicator" />}
               </button>
             )}
+            {SITES.map((site) => !site.embeddable ? (
+              <a
+                className="hologram-chat-toggle"
+                key={site.id}
+                href={site.home}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Abrir ${site.label} em outra janela`}
+              >
+                <span>{site.label}</span>
+              </a>
+            ) : (
+              <button
+                className="hologram-chat-toggle"
+                type="button"
+                key={site.id}
+                aria-label={`${openSites.includes(site.id) ? 'Fechar' : 'Abrir'} ${site.label}`}
+                aria-expanded={openSites.includes(site.id)}
+                onClick={() => toggleSite(site.id)}
+              >
+                <span>{site.label}</span>
+              </button>
+            ))}
+            <button
+              className="hologram-chat-toggle"
+              type="button"
+              aria-label={searchOpen ? 'Fechar pesquisa rápida' : 'Abrir pesquisa rápida'}
+              aria-expanded={searchOpen}
+              onClick={() => setSearchOpen((open) => !open)}
+            >
+              <span>PESQUISA</span>
+            </button>
+            <button
+              className="hologram-chat-toggle"
+              type="button"
+              aria-label={usageOpen ? 'Fechar uso do Claude' : 'Abrir uso do Claude'}
+              aria-expanded={usageOpen}
+              onClick={() => setUsageOpen((open) => !open)}
+            >
+              <span>USO CLAUDE</span>
+            </button>
             <button
               className="hologram-chat-toggle"
               type="button"
@@ -694,7 +773,7 @@ export function ChatPageWithVideo() {
           ))}
         </div>
 
-        <div className="hud-col hud-col-left">
+        <div className="hud-col hud-col-left" onClick={foldSidePanel}>
           <section className="hud-badges hud-hide-md" aria-label="Estado dos enlaces">
             <div className="hud-badges-head"><span className="is-active">CONEXÃO</span><span>VOZ</span></div>
             <div className="hud-badge-row">
@@ -783,7 +862,7 @@ export function ChatPageWithVideo() {
         </section>
         </div>
 
-        <div className="hud-col hud-col-right">
+        <div className="hud-col hud-col-right" onClick={foldSidePanel}>
           <section className="hud-disc-panel hud-hide-md" aria-label="Fluxo de tokens recentes">
             <svg className="hud-disc" viewBox="0 0 80 80" aria-hidden="true">
               <circle className="hud-disc-ring" cx="40" cy="40" r="36" />
@@ -987,6 +1066,7 @@ export function ChatPageWithVideo() {
               {Array.from({ length: 26 }, (_, index) => <i key={index} />)}
             </div>
           </section>
+          <ClaudeUsagePanel docked open={usageOpen} onClose={() => setUsageOpen(false)} />
         </div>
 
         <section className="hologram-compact-metrics" aria-label="Telemetria resumida">
@@ -1069,6 +1149,20 @@ export function ChatPageWithVideo() {
 
         <UnreadMailPanel mail={mail} open={mailOpen} onClose={closeMail} />
         <NewsPanel news={news} open={newsOpen} onClose={closeNews} />
+        <NoteCards
+          notes={noteHits}
+          open={noteHits.length > 0 && dismissedNotes !== noteKey}
+          onClose={() => setDismissedNotes(noteKey)}
+        />
+        <SearchPanel open={searchOpen} onClose={() => setSearchOpen(false)} />
+        {SITES.filter((site) => site.embeddable).map((site) => (
+          <SitePanel
+            key={site.id}
+            site={site}
+            open={openSites.includes(site.id)}
+            onClose={() => setOpenSites((current) => current.filter((s) => s !== site.id))}
+          />
+        ))}
 
         {morningNeedsGesture && (
           <button className="morning-hint" type="button" onClick={startMorning}>

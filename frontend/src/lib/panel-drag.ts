@@ -37,7 +37,7 @@ export function clampPanelOffset(offset: PanelOffset, base: Box, bounds: Box): P
   };
 }
 
-const STORAGE_PREFIX = 'jarvis.panel-offset.';
+const STORAGE_PREFIX = 'jarvis.panel-offset.v5.';
 
 /** Last position the user left a panel in; `null` when none was saved. */
 export function loadPanelOffset(id: string): PanelOffset | null {

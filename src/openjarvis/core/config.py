@@ -1530,6 +1530,9 @@ class SecurityConfig:
     profile: str = ""
     # Directories file_read/file_write may touch; empty means unrestricted.
     allowed_dirs: List[str] = field(default_factory=list)
+    # Directories file_read/file_list may read. Empty falls back to allowed_dirs,
+    # so reading can be wider than writing without widening file_write.
+    read_allowed_dirs: List[str] = field(default_factory=list)
     # Directories file_delete may touch; empty denies all deletions.
     delete_allowed_dirs: List[str] = field(default_factory=list)
     vault_key_path: str = field(

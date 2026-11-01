@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional
+from zoneinfo import ZoneInfo
 
 from openjarvis.agents._stubs import AgentContext, AgentResult, ToolUsingAgent
 from openjarvis.agents.digest_store import DigestArtifact, DigestStore
@@ -38,6 +39,23 @@ def _load_persona(persona_name: str) -> str:
     return ""
 
 
+def time_greeting(hour: int) -> str:
+    """Portuguese greeting for a local hour: 5-11 morning, 12-17 afternoon."""
+    if 5 <= hour < 12:
+        return "Bom dia"
+    if 12 <= hour < 18:
+        return "Boa tarde"
+    return "Boa noite"
+
+
+def _now_in(timezone_name: str) -> datetime:
+    """Current time in *timezone_name*, or the machine's local time if unknown."""
+    try:
+        return datetime.now(ZoneInfo(timezone_name))
+    except Exception:  # unknown zone, or no tz database on this platform
+        return datetime.now()
+
+
 @AgentRegistry.register("morning_digest")
 class MorningDigestAgent(ToolUsingAgent):
     """Pre-compute a daily digest from configured data sources."""
@@ -62,7 +80,7 @@ class MorningDigestAgent(ToolUsingAgent):
     def _build_system_prompt(self) -> str:
         """Assemble the system prompt from persona + briefing structure."""
         persona_text = _load_persona(self._persona)
-        now = datetime.now()
+        now = _now_in(self._timezone)
         honorific = getattr(self, "_honorific", "sir")
         sections = dict.fromkeys(
             str(section).strip().casefold()

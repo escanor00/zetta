@@ -30,6 +30,11 @@ def file_tool_kwargs(name: str, config: Any = None) -> dict[str, List[str]]:
         }
     if name not in {"file_read", "file_write", "file_list"}:
         return {}
+    if name in {"file_read", "file_list"}:
+        # Reading may be allowed wider than writing (security.read_allowed_dirs).
+        read_dirs = getattr(config.security, "read_allowed_dirs", [])
+        if read_dirs:
+            return {"allowed_dirs": validate_allowed_dirs(read_dirs)}
     return {"allowed_dirs": validate_allowed_dirs(config.security.allowed_dirs)}
 
 

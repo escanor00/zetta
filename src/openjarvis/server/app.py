@@ -30,6 +30,7 @@ from openjarvis.server.obsidian_active_note import (
 from openjarvis.server.research_router import router as research_router
 from openjarvis.server.routes import router
 from openjarvis.server.morning_routes import router as morning_router
+from openjarvis.server.claude_usage import router as claude_usage_router
 from openjarvis.server.system_stats import router as system_stats_router
 from openjarvis.server.obsidian_active_note import router as obsidian_active_note_router
 from openjarvis.server.upload_router import router as upload_router
@@ -484,6 +485,7 @@ def create_app(
     app.include_router(router)
     app.include_router(obsidian_active_note_router)
     app.include_router(system_stats_router)
+    app.include_router(claude_usage_router)
     app.include_router(morning_router)
     app.include_router(dashboard_router)
     app.include_router(comparison_router)

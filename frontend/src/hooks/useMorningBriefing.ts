@@ -5,6 +5,8 @@ import {
   MORNING_DIGEST_ID,
   MORNING_KEY,
   MORNING_RECAP_ID,
+  fillGreeting,
+  stripLeadingGreeting,
   isMorningForced,
   localDateKey,
   shouldRunMorningBriefing,
@@ -17,8 +19,8 @@ const START_DELAY_MS = 1500;
 const userHasInteracted = () => navigator.userActivation?.hasBeenActive ?? false;
 
 /**
- * Once per day, on the first open: speaks a short recap while today's digest is
- * prepared in the background, then speaks the digest itself.
+ * Once per day, on the first open: speaks a short recap while a fresh digest is
+ * generated in the background, then speaks the digest itself.
  *
  * Browsers refuse audio before the first click or key press, so when playback
  * is blocked this reports `needsGesture` and starts on the next interaction.
@@ -35,7 +37,7 @@ export function useMorningBriefing(): { needsGesture: boolean; start: () => void
     if (running.current || finished.current) return;
     running.current = true;
 
-    const recap = await fetchMorningRecap();
+    const recap = fillGreeting(await fetchMorningRecap());
 
     if (recap) {
       await useTtsStore.getState().speak(MORNING_RECAP_ID, recap);
@@ -57,11 +59,15 @@ export function useMorningBriefing(): { needsGesture: boolean; start: () => void
 
     // The digest takes several seconds to generate. Starting it only once the
     // recap is playing keeps it from slowing the recap's first words, and it is
-    // ready well before the recap ends.
-    const digest = (await fetchTodayDigest()) ?? (await generateDigest());
+    // ready well before the recap ends. It is regenerated on every briefing so
+    // mail and news are current; the stored one is only a fallback if generation
+    // fails (the server's "today" is a UTC day, so it can be stale for the user).
+    const digest = (await generateDigest()) ?? (await fetchTodayDigest());
     if (!digest) return;
+    // Never greet before the mail, with or without a recap.
+    const spoken = stripLeadingGreeting(digest);
     await waitForTtsIdle(120_000);
-    await useTtsStore.getState().speak(MORNING_DIGEST_ID, digest);
+    await useTtsStore.getState().speak(MORNING_DIGEST_ID, spoken || digest);
   }, []);
 
   const start = useCallback(() => {

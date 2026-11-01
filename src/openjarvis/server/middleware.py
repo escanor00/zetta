@@ -52,9 +52,13 @@ def create_security_middleware() -> Any:
             )
             # media-src blob: lets the UI play synthesized speech, which arrives
             # as a blob URL; default-src alone refused it.
+            # img-src / frame-src: the YouTube panel shows video thumbnails and
+            # plays videos in an embedded player.
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-                "media-src 'self' blob:"
+                "media-src 'self' blob:; "
+                "img-src 'self' data: blob: https://i.ytimg.com; "
+                "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com"
             )
             return response
 
@@ -70,6 +74,9 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
     "Content-Security-Policy": (
-        "default-src 'self' 'unsafe-inline' 'unsafe-eval'; media-src 'self' blob:"
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "media-src 'self' blob:; "
+        "img-src 'self' data: blob: https://i.ytimg.com; "
+        "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com"
     ),
 }

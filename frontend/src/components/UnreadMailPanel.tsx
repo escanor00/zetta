@@ -31,7 +31,7 @@ export function UnreadMailPanel({ mail, open, onClose }: UnreadMailPanelProps) {
   return (
     <section
       ref={panelRef}
-      className={`mail-panel ${open ? '' : 'is-leaving'} ${dragging ? 'is-dragging' : ''}`}
+      className={`mail-panel unread-panel ${open ? '' : 'is-leaving'} ${dragging ? 'is-dragging' : ''}`}
       style={style}
       role="dialog"
       aria-label={title}
